@@ -1,0 +1,234 @@
+haskell-hashable (1.3.0.0-deepin1) unstable; urgency=medium
+
+  * Rebuild
+
+ -- Deepin Packages Builder <packages@deepin.org>  Mon, 14 Nov 2022 17:38:39 +0800
+
+haskell-hashable (1.3.0.0-2) unstable; urgency=medium
+
+  * Disable tests due to a dependency loop.
+
+ -- Clint Adams <clint@debian.org>  Sat, 30 May 2020 18:53:58 -0400
+
+haskell-hashable (1.3.0.0-1) unstable; urgency=medium
+
+  * New upstream version.
+
+ -- Clint Adams <clint@debian.org>  Sat, 30 May 2020 16:26:38 -0400
+
+haskell-hashable (1.2.7.0-6) unstable; urgency=medium
+
+  * Bump dependency versions
+
+ -- Gianfranco Costamagna <locutusofborg@debian.org>  Sun, 25 Aug 2019 20:05:58 +0200
+
+haskell-hashable (1.2.7.0-5) unstable; urgency=medium
+
+  * Fix "FTBFS when built with dpkg-buildpackage -A" by preprocessing
+    the .hsc files before calling haddock (Closes: #906602).
+
+ -- Ilias Tsitsimpis <iliastsi@debian.org>  Mon, 15 Oct 2018 15:54:10 +0300
+
+haskell-hashable (1.2.7.0-4) unstable; urgency=medium
+
+  * Remove build dependency on libghc-text-dev (provided by ghc-8.4.3)
+
+ -- Ilias Tsitsimpis <iliastsi@debian.org>  Mon, 01 Oct 2018 13:47:32 +0300
+
+haskell-hashable (1.2.7.0-3) unstable; urgency=medium
+
+  [ Clint Adams ]
+  * Set Rules-Requires-Root to no.
+
+  [ Ilias Tsitsimpis ]
+  * Bump debhelper compat level to 10
+
+ -- Ilias Tsitsimpis <iliastsi@debian.org>  Sun, 30 Sep 2018 21:10:29 +0300
+
+haskell-hashable (1.2.7.0-2) unstable; urgency=medium
+
+  * Refresh patch, add a comma.
+
+ -- Clint Adams <clint@debian.org>  Thu, 12 Apr 2018 17:13:00 -0400
+
+haskell-hashable (1.2.7.0-1) unstable; urgency=medium
+
+  [ Ilias Tsitsimpis ]
+  * Change Priority to optional. Since Debian Policy version 4.0.1,
+    priority extra has been deprecated.
+  * Use the HTTPS form of the copyright-format URL
+  * Modify d/watch and Source field in d/copyright to use HTTPS
+  * Declare compliance with Debian policy 4.1.1
+  * Use salsa.debian.org URLs in Vcs-{Browser,Git} fields
+
+  [ Clint Adams ]
+  * Bump to Standards-Version 4.1.4.
+  * New upstream release
+
+ -- Clint Adams <clint@debian.org>  Mon, 09 Apr 2018 16:05:08 -0400
+
+haskell-hashable (1.2.6.1-1) unstable; urgency=medium
+
+  * New upstream release
+
+ -- Clint Adams <clint@debian.org>  Thu, 06 Jul 2017 17:32:23 -0400
+
+haskell-hashable (1.2.4.0-3) unstable; urgency=medium
+
+  * Upload to unstable as part of GHC 8 transition.
+
+ -- Clint Adams <clint@debian.org>  Thu, 27 Oct 2016 18:33:59 -0400
+
+haskell-hashable (1.2.4.0-2) experimental; urgency=medium
+
+  * Consolidate package descriptions into X-Description.
+  * Temporarily build-depend on ghc 8.
+
+ -- Clint Adams <clint@debian.org>  Thu, 13 Oct 2016 10:26:03 -0400
+
+haskell-hashable (1.2.4.0-1) unstable; urgency=medium
+
+  [ Dmitry Bogatov ]
+  * Use secure (https) uri in Vcs-Git field in 'debian/control'
+  * Bump standards version to 3.9.8 (no changes needed)
+  * Convert `debian/copyright' to dep5 format
+
+  [ Clint Adams ]
+  * New upstream version.
+
+ -- Clint Adams <clint@debian.org>  Tue, 24 May 2016 22:36:57 -0400
+
+haskell-hashable (1.2.3.3-3) unstable; urgency=medium
+
+  * Switch Vcs-Git/Vcs-Browser headers to new location.
+
+ -- Clint Adams <clint@debian.org>  Thu, 03 Dec 2015 14:54:32 -0500
+
+haskell-hashable (1.2.3.3-2) experimental; urgency=medium
+
+  * Bump standards-version to 3.9.6
+  * Depend on haskell-devscripts >= 0.10 to ensure that this package
+    builds against GHC in experimental
+
+ -- Joachim Breitner <nomeata@debian.org>  Thu, 20 Aug 2015 10:27:46 +0200
+
+haskell-hashable (1.2.3.3-1) unstable; urgency=medium
+
+  * New upstream release
+
+ -- Joachim Breitner <nomeata@debian.org>  Mon, 29 Jun 2015 11:18:58 +0200
+
+haskell-hashable (1.2.3.2-3) unstable; urgency=medium
+
+  * Drop patch to disable mmap on some architectures; instead, call it
+    through a C helper, fixing problems with the type of the offset argument
+    on some architectures.
+  * Borrow debian/rules from haskell-bindings-gpgme to build with LFS flags.
+
+ -- Colin Watson <cjwatson@debian.org>  Sat, 09 May 2015 20:56:49 +0100
+
+haskell-hashable (1.2.3.2-2) unstable; urgency=medium
+
+  * Upload to unstable
+
+ -- Joachim Breitner <nomeata@debian.org>  Mon, 27 Apr 2015 11:50:10 +0200
+
+haskell-hashable (1.2.3.2-1) experimental; urgency=medium
+
+  * New upstream release
+
+ -- Joachim Breitner <nomeata@debian.org>  Mon, 06 Apr 2015 13:02:12 +0200
+
+haskell-hashable (1.2.3.0-1) experimental; urgency=medium
+
+  * Depend on haskell-devscripts 0.9, found in experimental
+  * New upstream release
+
+ -- Joachim Breitner <nomeata@debian.org>  Sun, 21 Dec 2014 15:48:26 +0100
+
+haskell-hashable (1.2.1.0-5) unstable; urgency=medium
+
+  * Add hppa to mmap patch (Closes: 753248)
+
+ -- Joachim Breitner <nomeata@debian.org>  Sun, 29 Jun 2014 12:53:33 -0700
+
+haskell-hashable (1.2.1.0-4) unstable; urgency=low
+
+  * Fix mmap patch to use Cabal-compatible architecture names; "mips" is
+    already aliased to cover both big- and little-endian variants, and
+    "powerpc" and "powerpc64" are spelled "ppc" and "ppc64" respectively.
+
+ -- Colin Watson <cjwatson@debian.org>  Fri, 25 Oct 2013 15:51:12 +0100
+
+haskell-hashable (1.2.1.0-3) unstable; urgency=low
+
+  * Disable also on powerpc64, maybe there is some arch name confusion
+    somewhere.
+
+ -- Joachim Breitner <nomeata@debian.org>  Thu, 24 Oct 2013 19:18:06 +0200
+
+haskell-hashable (1.2.1.0-2) unstable; urgency=low
+
+  * Disable calls to mmap in testsuite, whose failure prevented build
+
+ -- Louis Bettens <louis@bettens.info>  Wed, 23 Oct 2013 22:21:51 +0200
+
+haskell-hashable (1.2.1.0-1) unstable; urgency=low
+
+  [ Joachim Breitner ]
+  * Adjust watch file to new hackage layout
+
+  [ Louis Bettens ]
+  * New upstream release
+  * add HUnit dependency
+  * raise GHC depended version because of cabal bug #1087
+
+ -- Louis Bettens <louis@bettens.info>  Mon, 07 Oct 2013 20:02:20 +0200
+
+haskell-hashable (1.1.2.5-3) unstable; urgency=low
+
+  * Move Haskell blurb to the end of the description, reduces the impact
+    of #708703
+
+ -- Joachim Breitner <nomeata@debian.org>  Sat, 25 May 2013 23:52:21 +0200
+
+haskell-hashable (1.1.2.5-2) unstable; urgency=low
+
+  * Enable compat level 9
+  * Use substvars for Haskell description blurbs
+
+ -- Joachim Breitner <nomeata@debian.org>  Fri, 24 May 2013 12:50:48 +0200
+
+haskell-hashable (1.1.2.5-1) experimental; urgency=low
+
+  * Depend on haskell-devscripts 0.8.13 to ensure this packages is built
+    against experimental
+  * Bump standards version, no change
+  * New upstream release
+  * Enable testsuite
+
+ -- Joachim Breitner <nomeata@debian.org>  Wed, 17 Oct 2012 17:00:42 +0200
+
+haskell-hashable (1.1.2.3-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Joachim Breitner <nomeata@debian.org>  Sat, 25 Feb 2012 16:34:26 +0100
+
+haskell-hashable (1.1.2.2-1) unstable; urgency=low
+
+  * New upstream version.
+
+ -- Clint Adams <clint@debian.org>  Sun, 05 Feb 2012 13:18:17 -0500
+
+haskell-hashable (1.1.2.1-1) unstable; urgency=low
+
+  * New upstream version.
+
+ -- Clint Adams <clint@debian.org>  Tue, 30 Aug 2011 14:05:17 -0400
+
+haskell-hashable (1.1.2.0-1) unstable; urgency=low
+
+  * Initial packaging.
+
+ -- Clint Adams <clint@debian.org>  Sat, 25 Jun 2011 18:47:42 -0400

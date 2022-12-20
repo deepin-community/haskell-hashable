@@ -1,0 +1,60 @@
+Source: haskell-hashable
+Maintainer: Debian Haskell Group <pkg-haskell-maintainers@lists.alioth.debian.org>
+Uploaders: Clint Adams <clint@debian.org>
+Priority: optional
+Section: haskell
+Rules-Requires-Root: no
+Build-Depends: debhelper (>= 10),
+ haskell-devscripts (>= 0.13),
+ cdbs,
+ ghc (>= 8.4.3),
+ ghc-prof,
+ libghc-random-dev (>= 1.0),
+ libghc-random-dev (<< 1.2),
+Build-Depends-Indep: ghc-doc,
+Standards-Version: 4.5.0
+Homepage: http://github.com/tibbe/hashable
+Vcs-Browser: https://salsa.debian.org/haskell-team/DHG_packages/tree/master/p/haskell-hashable
+Vcs-Git: https://salsa.debian.org/haskell-team/DHG_packages.git [p/haskell-hashable]
+X-Description: class for types that can be converted to a hash value
+ It defines a class, Hashable, for types that can be converted to a
+ hash value. This class exists for the benefit of hashing-based data
+ structures. The package provides instances for basic types and a way
+ to combine hash values.
+
+Package: libghc-hashable-dev
+Architecture: any
+Depends: ${haskell:Depends},
+ ${shlibs:Depends},
+ ${misc:Depends},
+Recommends: ${haskell:Recommends},
+Suggests: ${haskell:Suggests},
+Provides: ${haskell:Provides},
+Description: ${haskell:ShortDescription}${haskell:ShortBlurb}
+ ${haskell:LongDescription}
+ .
+ ${haskell:Blurb}
+
+Package: libghc-hashable-prof
+Architecture: any
+Depends: ${haskell:Depends},
+ ${misc:Depends},
+Recommends: ${haskell:Recommends},
+Suggests: ${haskell:Suggests},
+Provides: ${haskell:Provides},
+Description: ${haskell:ShortDescription}${haskell:ShortBlurb}
+ ${haskell:LongDescription}
+ .
+ ${haskell:Blurb}
+
+Package: libghc-hashable-doc
+Architecture: all
+Section: doc
+Depends: ${misc:Depends},
+ ${haskell:Depends},
+Recommends: ${haskell:Recommends},
+Suggests: ${haskell:Suggests},
+Description: ${haskell:ShortDescription}${haskell:ShortBlurb}
+ ${haskell:LongDescription}
+ .
+ ${haskell:Blurb}
