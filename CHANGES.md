@@ -1,5 +1,53 @@
 See also https://pvp.haskell.org/faq
 
+## Version 1.3.5.0
+
+ * Add `Solo` instance (base-4.15+, GHC-9+)
+
+## Version 1.3.4.1
+
+ * Fix compilation on 32 bit platforms
+ * Fix `Tree` instance
+
+## Version 1.3.4.0
+ * `Text` and `ByteString` hashes include length.
+   This fixes a variant of https://github.com/haskell-unordered-containers/hashable/issues/74
+   for texts and bytestrings.
+   https://github.com/haskell-unordered-containers/hashable/pull/223
+ * Use correct prime in `combine`.
+   This should improve the hash quality of compound structures on 64bit systems.
+   https://github.com/haskell-unordered-containers/hashable/pull/224
+ * Add instance for types in `containers` package
+   https://github.com/haskell-unordered-containers/hashable/pull/226
+ * Change `Int`, `Int64` and `Word64` `hashWithSalt` slightly.
+   https://github.com/haskell-unordered-containers/hashable/pull/227
+
+## Version 1.3.3.0
+
+ * `Text` hashing uses 64-bit FNV prime
+ * Don't truncate Text hashvalues on 64bit Windows:
+   https://github.com/haskell-unordered-containers/hashable/pull/211
+
+## Version 1.3.2.0
+
+ * Add `Hashable (Fixed a)` for `base <4.7` versions.
+ * Add documentation:
+   - `hashable` is not a stable hash
+   - `hashWithSalt` may return negative values
+   - there is `time-compat` with `Hashable` instances for `time` types.
+ * Add `random-initial-seed` flag causing the initial seed
+   to be randomized on each start of an executable using `hashable`.
+
+## Version 1.3.1.0
+
+ * Add `Hashable1` instances to `semigroups` types.
+
+ * Use `ghc-bignum` with GHC-9.0
+
+ * Use FNV-1 constants.
+
+ * Make `hashable-examples` a test-suite
+
 ## Version 1.3.0.0
 
  * Semantic change of `Hashable Arg` instance to *not* hash the second
