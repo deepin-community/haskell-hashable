@@ -1,11 +1,15 @@
 {-# LANGUAGE BangPatterns, CPP, MagicHash,
              ScopedTypeVariables, UnliftedFFITypes, DeriveDataTypeable,
              DefaultSignatures, FlexibleContexts, TypeFamilies,
-             MultiParamTypeClasses #-}
+             MultiParamTypeClasses, CApiFFI #-}
+
+{-# LANGUAGE Trustworthy #-}
 
 #if __GLASGOW_HASKELL__ >= 801
 {-# LANGUAGE PolyKinds #-} -- For TypeRep instances
 #endif
+
+{-# OPTIONS_GHC -fno-warn-deprecations #-}
 
 ------------------------------------------------------------------------
 -- |
@@ -60,7 +64,6 @@ module Data.Hashable.Class
 import Control.Applicative (Const(..))
 import Control.Exception (assert)
 import Control.DeepSeq (NFData(rnf))
-import Data.Bits (shiftL, shiftR, xor)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Unsafe as B
@@ -74,7 +77,6 @@ import qualified Data.Text.Internal as T
 import qualified Data.Text.Lazy as TL
 import Data.Version (Version(..))
 import Data.Word (Word8, Word16, Word32, Word64)
-import Foreign.C (CString)
 import Foreign.Marshal.Utils (with)
 import Foreign.Ptr (Ptr, FunPtr, IntPtr, WordPtr, castPtr, castFunPtrToPtr, ptrToIntPtr)
 import Foreign.Storable (alignment, peek, sizeOf)
@@ -84,6 +86,12 @@ import GHC.Prim (ThreadId#)
 import System.IO.Unsafe (unsafeDupablePerformIO)
 import System.Mem.StableName
 import Data.Unique (Unique, hashUnique)
+import qualified Data.IntMap as IntMap
+import qualified Data.IntSet as IntSet
+import qualified Data.Map as Map
+import qualified Data.Sequence as Seq
+import qualified Data.Set as Set
+import qualified Data.Tree as Tree
 
 -- As we use qualified F.Foldable, we don't get warnings with newer base
 import qualified Data.Foldable as F
@@ -94,6 +102,9 @@ import Data.Proxy (Proxy)
 
 #if MIN_VERSION_base(4,7,0)
 import Data.Fixed (Fixed(..))
+#else
+import Data.Fixed (Fixed)
+import Unsafe.Coerce (unsafeCoerce)
 #endif
 
 #if MIN_VERSION_base(4,8,0)
@@ -114,22 +125,10 @@ import Data.Typeable.Internal (Typeable, TypeRep (..))
 import GHC.Fingerprint.Type(Fingerprint(..))
 #endif
 
-#if MIN_VERSION_base(4,5,0)
-import Foreign.C (CLong(..))
 import Foreign.C.Types (CInt(..))
-#else
-import Foreign.C (CLong)
-import Foreign.C.Types (CInt)
-#endif
 
 #if !(MIN_VERSION_base(4,8,0))
 import Data.Word (Word)
-#endif
-
-#if MIN_VERSION_base(4,7,0)
-import Data.Bits (finiteBitSize)
-#else
-import Data.Bits (bitSize)
 #endif
 
 #if !(MIN_VERSION_bytestring(0,10,0))
@@ -138,6 +137,13 @@ import qualified Data.ByteString.Lazy.Internal as BL  -- foldlChunks
 
 #if MIN_VERSION_bytestring(0,10,4)
 import qualified Data.ByteString.Short.Internal as BSI
+#endif
+
+#ifdef VERSION_ghc_bignum
+import GHC.Num.BigNat (BigNat (..))
+import GHC.Num.Integer (Integer (..))
+import GHC.Num.Natural (Natural (..))
+import GHC.Exts (Int (..), sizeofByteArray#)
 #endif
 
 #ifdef VERSION_integer_gmp
@@ -156,8 +162,10 @@ import GHC.Integer.GMP.Internals (BigNat(BN#))
 
 #if MIN_VERSION_base(4,8,0)
 import Data.Void (Void, absurd)
-import GHC.Natural (Natural(..))
 import GHC.Exts (Word(..))
+#ifndef VERSION_ghc_bignum
+import GHC.Natural (Natural(..))
+#endif
 #endif
 
 #if MIN_VERSION_base(4,9,0)
@@ -170,7 +178,22 @@ import qualified Data.Functor.Product as FP
 import qualified Data.Functor.Sum as FS
 #endif
 
+#if MIN_VERSION_base(4,16,0)
+import Data.Tuple (Solo (..))
+#elif MIN_VERSION_base(4,15,0)
+import GHC.Tuple (Solo (..))
+#endif
+
 import Data.String (IsString(..))
+
+#if MIN_VERSION_base(4,9,0)
+import Data.Kind (Type)
+#else
+#define Type *
+#endif
+
+import Data.Hashable.Imports
+import Data.Hashable.LowLevel
 
 #include "MachDeps.h"
 
@@ -179,18 +202,17 @@ infixl 0 `hashWithSalt`
 ------------------------------------------------------------------------
 -- * Computing hash values
 
--- | A default salt used in the implementation of 'hash'.
-defaultSalt :: Int
-#if WORD_SIZE_IN_BITS == 64
-defaultSalt = -2578643520546668380  -- 0xdc36d1615b7400a4
-#else
-defaultSalt = 0x087fc72c
-#endif
-{-# INLINE defaultSalt #-}
-
 -- | The class of types that can be converted to a hash value.
 --
 -- Minimal implementation: 'hashWithSalt'.
+--
+-- /Note:/ the hash is not guaranteed to be stable across
+-- library versions, operating systems or architectures.
+-- For stable hashing use named hashes: SHA256, CRC32 etc.
+--
+-- If you are looking for 'Hashable' instance in @time@ package,
+-- check [time-compat](https://hackage.haskell.org/package/time-compat)
+--
 class Hashable a where
     -- | Return a hash value for the argument, using the given salt.
     --
@@ -214,6 +236,9 @@ class Hashable a where
     --    application of the method. This implies that any instance
     --    that defines 'hashWithSalt' /must/ make use of the salt in
     --    its implementation.
+    --
+    --  * 'hashWithSalt' may return negative 'Int' values.
+    --
     hashWithSalt :: Int -> a -> Int
 
     -- | Like 'hashWithSalt', but no salt is used. The default
@@ -237,7 +262,7 @@ genericHashWithSalt = \salt -> ghashWithSalt HashArgs0 salt . from
 data Zero
 data One
 
-data family HashArgs arity a :: *
+data family HashArgs arity a :: Type
 data instance HashArgs Zero a = HashArgs0
 newtype instance HashArgs One  a = HashArgs1 (Int -> a -> Int)
 
@@ -287,7 +312,7 @@ defaultLiftHashWithSalt h = liftHashWithSalt2 hashWithSalt h
 -- the non-generic instance use case. Instead we provide
 -- 'defaultHashWith'.
 defaultHashWithSalt :: Hashable a => Int -> a -> Int
-defaultHashWithSalt salt x = salt `combine` hash x
+defaultHashWithSalt salt x = salt `hashInt` hash x
 
 -- | Transform a value into a 'Hashable' value, then hash the
 -- transformed value using the given salt.
@@ -301,6 +326,8 @@ defaultHashWithSalt salt x = salt `combine` hash x
 -- >
 -- > instance Hashable Foo where
 -- >     hashWithSalt = hashUsing fromEnum
+--
+-- @since 1.2.0.0
 hashUsing :: (Hashable b) =>
              (a -> b)           -- ^ Transformation function.
           -> Int                -- ^ Salt.
@@ -311,7 +338,7 @@ hashUsing f salt x = hashWithSalt salt (f x)
 
 instance Hashable Int where
     hash = id
-    hashWithSalt = defaultHashWithSalt
+    hashWithSalt = hashInt
 
 instance Hashable Int8 where
     hash = fromIntegral
@@ -326,15 +353,8 @@ instance Hashable Int32 where
     hashWithSalt = defaultHashWithSalt
 
 instance Hashable Int64 where
-    hash n
-#if MIN_VERSION_base(4,7,0)
-        | finiteBitSize (undefined :: Int) == 64 = fromIntegral n
-#else
-        | bitSize (undefined :: Int) == 64 = fromIntegral n
-#endif
-        | otherwise = fromIntegral (fromIntegral n `xor`
-                                   (fromIntegral n `shiftR` 32 :: Word64))
-    hashWithSalt = defaultHashWithSalt
+    hash = fromIntegral
+    hashWithSalt = hashInt64
 
 instance Hashable Word where
     hash = fromIntegral
@@ -353,14 +373,7 @@ instance Hashable Word32 where
     hashWithSalt = defaultHashWithSalt
 
 instance Hashable Word64 where
-    hash n
-#if MIN_VERSION_base(4,7,0)
-        | finiteBitSize (undefined :: Int) == 64 = fromIntegral n
-#else
-        | bitSize (undefined :: Int) == 64 = fromIntegral n
-#endif
-        | otherwise = fromIntegral (n `xor` (n `shiftR` 32))
-    hashWithSalt = defaultHashWithSalt
+    hashWithSalt = hashWord64
 
 instance Hashable () where
     hash = fromEnum
@@ -378,7 +391,7 @@ instance Hashable Char where
     hash = fromEnum
     hashWithSalt = defaultHashWithSalt
 
-#if defined(MIN_VERSION_integer_gmp_1_0_0)
+#if defined(MIN_VERSION_integer_gmp_1_0_0) || defined(VERSION_ghc_bignum)
 instance Hashable BigNat where
     hashWithSalt salt (BN# ba) = hashByteArrayWithSalt ba 0 numBytes salt
                                  `hashWithSalt` size
@@ -389,6 +402,13 @@ instance Hashable BigNat where
 
 #if MIN_VERSION_base(4,8,0)
 instance Hashable Natural where
+# if defined(VERSION_ghc_bignum)
+    hash (NS n)   = hash (W# n)
+    hash (NB bn)  = hash (BN# bn)
+
+    hashWithSalt salt (NS n)  = hashWithSalt salt (W# n)
+    hashWithSalt salt (NB bn) = hashWithSalt salt (BN# bn)
+# else
 # if defined(MIN_VERSION_integer_gmp_1_0_0)
     hash (NatS# n)   = hash (W# n)
     hash (NatJ# bn)  = hash bn
@@ -400,9 +420,19 @@ instance Hashable Natural where
 
     hashWithSalt salt (Natural n) = hashWithSalt salt n
 # endif
+# endif
 #endif
 
 instance Hashable Integer where
+#if defined(VERSION_ghc_bignum)
+    hash (IS n)  = I# n
+    hash (IP bn) = hash (BN# bn)
+    hash (IN bn) = negate (hash (BN# bn))
+
+    hashWithSalt salt (IS n)  = hashWithSalt salt (I# n)
+    hashWithSalt salt (IP bn) = hashWithSalt salt (BN# bn)
+    hashWithSalt salt (IN bn) = negate (hashWithSalt salt (BN# bn))
+#else
 #if defined(VERSION_integer_gmp)
 # if defined(MIN_VERSION_integer_gmp_1_0_0)
     hash (S# n)   = (I# n)
@@ -440,6 +470,7 @@ instance Hashable Integer where
              | otherwise   = fromIntegral n : go (n `shiftR` WORD_SIZE_IN_BITS)
         maxInt = fromIntegral (maxBound :: Int)
         inBounds x = x >= fromIntegral (minBound :: Int) && x <= maxInt
+#endif
 #endif
 
 instance Hashable a => Hashable (Complex a) where
@@ -503,8 +534,8 @@ instance Hashable a => Hashable (Maybe a) where
     hashWithSalt = hashWithSalt1
 
 instance Hashable1 Maybe where
-    liftHashWithSalt _ s Nothing = s `combine` 0
-    liftHashWithSalt h s (Just a) = s `combine` distinguisher `h` a
+    liftHashWithSalt _ s Nothing = s `hashInt` 0
+    liftHashWithSalt h s (Just a) = s `hashInt` distinguisher `h` a
 
 instance (Hashable a, Hashable b) => Hashable (Either a b) where
     hash (Left a)  = 0 `hashWithSalt` a
@@ -515,8 +546,8 @@ instance Hashable a => Hashable1 (Either a) where
     liftHashWithSalt = defaultLiftHashWithSalt
 
 instance Hashable2 Either where
-    liftHashWithSalt2 h _ s (Left a) = s `combine` 0 `h` a
-    liftHashWithSalt2 _ h s (Right b) = s `combine` distinguisher `h` b
+    liftHashWithSalt2 h _ s (Left a) = s `hashInt` 0 `h` a
+    liftHashWithSalt2 _ h s (Right b) = s `hashInt` distinguisher `h` b
 
 instance (Hashable a1, Hashable a2) => Hashable (a1, a2) where
     hash (a1, a2) = hash a1 `hashWithSalt` a2
@@ -627,29 +658,41 @@ instance Hashable1 [] where
 instance Hashable B.ByteString where
     hashWithSalt salt bs = unsafeDupablePerformIO $
                            B.unsafeUseAsCStringLen bs $ \(p, len) ->
-                           hashPtrWithSalt p (fromIntegral len) salt
+                           hashPtrWithSalt p (fromIntegral len) (hashWithSalt salt len)
 
 instance Hashable BL.ByteString where
-    hashWithSalt = BL.foldlChunks hashWithSalt
+    hashWithSalt salt = finalise . BL.foldlChunks step (SP salt 0)
+      where
+        finalise (SP s l) = hashWithSalt s l
+        step (SP s l) bs  = unsafeDupablePerformIO $
+                            B.unsafeUseAsCStringLen bs $ \(p, len) -> do
+                                s' <- hashPtrWithSalt p (fromIntegral len) s
+                                return (SP s' (l + len))
 
 #if MIN_VERSION_bytestring(0,10,4)
 instance Hashable BSI.ShortByteString where
     hashWithSalt salt sbs@(BSI.SBS ba) =
-        hashByteArrayWithSalt ba 0 (BSI.length sbs) salt
+        hashByteArrayWithSalt ba 0 (BSI.length sbs) (hashWithSalt salt (BSI.length sbs))
 #endif
 
 instance Hashable T.Text where
     hashWithSalt salt (T.Text arr off len) =
         hashByteArrayWithSalt (TA.aBA arr) (off `shiftL` 1) (len `shiftL` 1)
-        salt
+        (hashWithSalt salt len)
 
 instance Hashable TL.Text where
-    hashWithSalt = TL.foldlChunks hashWithSalt
+    hashWithSalt salt = finalise . TL.foldlChunks step (SP salt 0)
+      where
+        finalise (SP s l) = hashWithSalt s l
+        step (SP s l) (T.Text arr off len) = SP
+            (hashByteArrayWithSalt (TA.aBA arr) (off `shiftL` 1) (len `shiftL` 1) s)
+            (l + len)
 
 -- | Compute the hash of a ThreadId.
 hashThreadId :: ThreadId -> Int
 hashThreadId (ThreadId t) = hash (fromIntegral (getThreadId t) :: Int)
 
+-- this cannot be capi, as GHC panics.
 foreign import ccall unsafe "rts_getThreadId" getThreadId
     :: ThreadId# -> CInt
 
@@ -729,23 +772,6 @@ hashPtr :: Ptr a      -- ^ pointer to the data to hash
         -> IO Int     -- ^ hash value
 hashPtr p len = hashPtrWithSalt p len defaultSalt
 
--- | Compute a hash value for the content of this pointer, using an
--- initial salt.
---
--- This function can for example be used to hash non-contiguous
--- segments of memory as if they were one contiguous segment, by using
--- the output of one hash as the salt for the next.
-hashPtrWithSalt :: Ptr a   -- ^ pointer to the data to hash
-                -> Int     -- ^ length, in bytes
-                -> Int     -- ^ salt
-                -> IO Int  -- ^ hash value
-hashPtrWithSalt p len salt =
-    fromIntegral `fmap` c_hashCString (castPtr p) (fromIntegral len)
-    (fromIntegral salt)
-
-foreign import ccall unsafe "hashable_fnv_hash" c_hashCString
-    :: CString -> CLong -> CLong -> IO CLong
-
 -- | Compute a hash value for the content of this 'ByteArray#',
 -- beginning at the specified offset, using specified number of bytes.
 hashByteArray :: ByteArray#  -- ^ data to hash
@@ -754,30 +780,6 @@ hashByteArray :: ByteArray#  -- ^ data to hash
               -> Int         -- ^ hash value
 hashByteArray ba0 off len = hashByteArrayWithSalt ba0 off len defaultSalt
 {-# INLINE hashByteArray #-}
-
--- | Compute a hash value for the content of this 'ByteArray#', using
--- an initial salt.
---
--- This function can for example be used to hash non-contiguous
--- segments of memory as if they were one contiguous segment, by using
--- the output of one hash as the salt for the next.
-hashByteArrayWithSalt
-    :: ByteArray#  -- ^ data to hash
-    -> Int         -- ^ offset, in bytes
-    -> Int         -- ^ length, in bytes
-    -> Int         -- ^ salt
-    -> Int         -- ^ hash value
-hashByteArrayWithSalt ba !off !len !h =
-    fromIntegral $ c_hashByteArray ba (fromIntegral off) (fromIntegral len)
-    (fromIntegral h)
-
-foreign import ccall unsafe "hashable_fnv_hash_offset" c_hashByteArray
-    :: ByteArray# -> CLong -> CLong -> CLong -> CLong
-
--- | Combine two given hash values.  'combine' has zero as a left
--- identity.
-combine :: Int -> Int -> Int
-combine h1 h2 = (h1 * 16777619) `xor` h2
 
 instance Hashable Unique where
     hash = hashUnique
@@ -788,11 +790,14 @@ instance Hashable Version where
         salt `hashWithSalt` branch `hashWithSalt` tags
 
 #if MIN_VERSION_base(4,7,0)
--- Using hashWithSalt1 would cause needless constraint
 instance Hashable (Fixed a) where
     hashWithSalt salt (MkFixed i) = hashWithSalt salt i
+-- Using hashWithSalt1 would cause needless constraint
 instance Hashable1 Fixed where
     liftHashWithSalt _ salt (MkFixed i) = hashWithSalt salt i
+#else
+instance Hashable (Fixed a) where
+    hashWithSalt salt x = hashWithSalt salt (unsafeCoerce x :: Integer)
 #endif
 
 #if MIN_VERSION_base(4,8,0)
@@ -826,11 +831,21 @@ instance Hashable1 Proxy where
 instance Hashable a => Hashable (NE.NonEmpty a) where
     hashWithSalt p (a NE.:| as) = p `hashWithSalt` a `hashWithSalt` as
 
+-- | @since 1.3.1.0
+instance Hashable1 NE.NonEmpty where
+    liftHashWithSalt h salt (a NE.:| as) = liftHashWithSalt h (h salt a) as
+
 instance Hashable a => Hashable (Min a) where
     hashWithSalt p (Min a) = hashWithSalt p a
 
+-- | @since 1.3.1.0
+instance Hashable1 Min where liftHashWithSalt h salt (Min a) = h salt a
+
 instance Hashable a => Hashable (Max a) where
     hashWithSalt p (Max a) = hashWithSalt p a
+
+-- | @since 1.3.1.0
+instance Hashable1 Max where liftHashWithSalt h salt (Max a) = h salt a
 
 -- | __Note__: Prior to @hashable-1.3.0.0@ the hash computation included the second argument of 'Arg' which wasn't consistent with its 'Eq' instance.
 --
@@ -841,14 +856,28 @@ instance Hashable a => Hashable (Arg a b) where
 instance Hashable a => Hashable (First a) where
     hashWithSalt p (First a) = hashWithSalt p a
 
+-- | @since 1.3.1.0
+instance Hashable1 First where liftHashWithSalt h salt (First a) = h salt a
+
 instance Hashable a => Hashable (Last a) where
     hashWithSalt p (Last a) = hashWithSalt p a
+
+-- | @since 1.3.1.0
+instance Hashable1 Last where liftHashWithSalt h salt (Last a) = h salt a
 
 instance Hashable a => Hashable (WrappedMonoid a) where
     hashWithSalt p (WrapMonoid a) = hashWithSalt p a
 
+-- | @since 1.3.1.0
+instance Hashable1 WrappedMonoid where liftHashWithSalt h salt (WrapMonoid a) = h salt a
+
+#if !MIN_VERSION_base(4,16,0)
 instance Hashable a => Hashable (Option a) where
     hashWithSalt p (Option a) = hashWithSalt p a
+
+-- | @since 1.3.1.0
+instance Hashable1 Option where liftHashWithSalt h salt (Option a) = liftHashWithSalt h salt a
+#endif
 #endif
 
 -- instances for @Data.Functor.{Product,Sum,Compose}@, present
@@ -869,8 +898,8 @@ instance (Hashable1 f, Hashable1 g, Hashable a) => Hashable (FP.Product f g a) w
     hashWithSalt = hashWithSalt1
 
 instance (Hashable1 f, Hashable1 g) => Hashable1 (FS.Sum f g) where
-    liftHashWithSalt h s (FS.InL a) = liftHashWithSalt h (s `combine` 0) a
-    liftHashWithSalt h s (FS.InR a) = liftHashWithSalt h (s `combine` distinguisher) a
+    liftHashWithSalt h s (FS.InL a) = liftHashWithSalt h (s `hashInt` 0) a
+    liftHashWithSalt h s (FS.InR a) = liftHashWithSalt h (s `hashInt` distinguisher) a
 
 instance (Hashable1 f, Hashable1 g, Hashable a) => Hashable (FS.Sum f g a) where
     hashWithSalt = hashWithSalt1
@@ -937,4 +966,79 @@ instance Ord1 Hashed where
 
 instance Show1 Hashed where
   liftShowsPrec sp _ d (Hashed a _) = showsUnaryWith sp "hashed" d a
+#endif
+
+-------------------------------------------------------------------------------
+-- containers
+-------------------------------------------------------------------------------
+
+-- | @since 1.3.4.0
+instance Hashable2 Map.Map where
+    liftHashWithSalt2 hk hv s m = Map.foldlWithKey'
+        (\s' k v -> hv (hk s' k) v)
+        (hashWithSalt s (Map.size m))
+        m
+
+-- | @since 1.3.4.0
+instance Hashable k => Hashable1 (Map.Map k) where
+    liftHashWithSalt h s m = Map.foldlWithKey'
+        (\s' k v -> h (hashWithSalt s' k) v)
+        (hashWithSalt s (Map.size m))
+        m
+
+-- | @since 1.3.4.0
+instance (Hashable k, Hashable v) => Hashable (Map.Map k v) where
+    hashWithSalt = hashWithSalt2
+
+-- | @since 1.3.4.0
+instance Hashable1 IntMap.IntMap where
+    liftHashWithSalt h s m = IntMap.foldlWithKey'
+        (\s' k v -> h (hashWithSalt s' k) v)
+        (hashWithSalt s (IntMap.size m))
+        m
+
+-- | @since 1.3.4.0
+instance Hashable v => Hashable (IntMap.IntMap v) where
+    hashWithSalt = hashWithSalt1
+
+-- | @since 1.3.4.0
+instance Hashable1 Set.Set where
+    liftHashWithSalt h s x = Set.foldl' h (hashWithSalt s (Set.size x)) x
+
+-- | @since 1.3.4.0
+instance Hashable v => Hashable (Set.Set v) where
+    hashWithSalt = hashWithSalt1
+
+-- | @since 1.3.4.0
+instance Hashable IntSet.IntSet where
+    hashWithSalt salt x = IntSet.foldl' hashWithSalt
+        (hashWithSalt salt (IntSet.size x))
+        x
+
+-- | @since 1.3.4.0
+instance Hashable1 Seq.Seq where
+    liftHashWithSalt h s x = F.foldl' h (hashWithSalt s (Seq.length x)) x
+
+-- | @since 1.3.4.0
+instance Hashable v => Hashable (Seq.Seq v) where
+    hashWithSalt = hashWithSalt1
+
+-- | @since 1.3.4.0
+instance Hashable1 Tree.Tree where
+    liftHashWithSalt h = go where
+        go s (Tree.Node x xs) = liftHashWithSalt go (h s x) xs
+
+-- | @since 1.3.4.0
+instance Hashable v => Hashable (Tree.Tree v) where
+    hashWithSalt = hashWithSalt1
+
+-------------------------------------------------------------------------------
+-- Solo
+-------------------------------------------------------------------------------
+
+#if MIN_VERSION_base(4,15,0)
+instance Hashable a => Hashable (Solo a) where
+    hashWithSalt = hashWithSalt1
+instance Hashable1 Solo where
+    liftHashWithSalt h salt (Solo x) = h salt x
 #endif
